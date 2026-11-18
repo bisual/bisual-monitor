@@ -9,6 +9,8 @@ use Throwable;
 
 final class BisualMonitorClient
 {
+    private const string INGEST_PATH = '/api/v1/companies/{company_uuid}/company-products/{company_product_uuid}/status-monitors/exec';
+
     /** @var array<string, true> */
     private array $disabled_commands = [];
 
@@ -16,7 +18,7 @@ final class BisualMonitorClient
         private bool $enabled,
         private string $company_uuid,
         private string $company_product_uuid,
-        private string $endpoint_template,
+        private string $host,
         private int $timeout_seconds,
         private string $slug_prefix,
     ) {}
@@ -68,14 +70,14 @@ final class BisualMonitorClient
      */
     private function post(string $slug, string $action, array $extra = []): void
     {
-        if (! $this->enabled || $this->company_uuid === '' || $this->company_product_uuid === '') {
+        if (! $this->enabled || $this->company_uuid === '' || $this->company_product_uuid === '' || $this->host === '') {
             return;
         }
 
-        $url = str_replace(
+        $url = rtrim($this->host, '/').str_replace(
             ['{company_uuid}', '{company_product_uuid}'],
             [$this->company_uuid, $this->company_product_uuid],
-            $this->endpoint_template,
+            self::INGEST_PATH,
         );
 
         try {

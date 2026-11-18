@@ -22,8 +22,8 @@ php artisan vendor:publish --tag=bisual-monitor-config
 BISUAL_MONITOR_ENABLED=true
 BISUAL_MONITOR_COMPANY_UUID=your-company-uuid
 BISUAL_MONITOR_COMPANY_PRODUCT_UUID=your-product-uuid
-# Optional override for local / staging API:
-# BISUAL_MONITOR_ENDPOINT=http://localhost:8000/api/v1/companies/{company_uuid}/company-products/{company_product_uuid}/status-monitors/exec
+# Optional API host override (path is fixed by the package):
+# BISUAL_MONITOR_HOST=http://localhost:8000
 ```
 
 Also ensure on the Bisual product:
@@ -31,7 +31,7 @@ Also ensure on the Bisual product:
 1. The product has an **active contract**.
 2. The server IP is on the company **IP allowlist** (required in production when allowlists are configured).
 
-`config/bisual-monitor.php` is optional after publish (timeouts, slug prefix, endpoint).
+`config/bisual-monitor.php` is optional after publish (host, timeouts, slug prefix).
 
 ## How it works
 
@@ -103,4 +103,4 @@ try {
 
 ## Version
 
-`0.1.2`
+`0.1.3`

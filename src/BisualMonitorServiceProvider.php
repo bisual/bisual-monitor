@@ -23,7 +23,7 @@ final class BisualMonitorServiceProvider extends ServiceProvider
                 enabled: (bool) config('bisual-monitor.enabled', true),
                 company_uuid: (string) config('bisual-monitor.company_uuid', ''),
                 company_product_uuid: (string) config('bisual-monitor.company_product_uuid', ''),
-                endpoint_template: (string) config('bisual-monitor.endpoint'),
+                host: (string) config('bisual-monitor.host', 'https://api.bisual.net'),
                 timeout_seconds: (int) config('bisual-monitor.timeout_seconds', 5),
                 slug_prefix: (string) config('bisual-monitor.default_slug_prefix', ''),
             );

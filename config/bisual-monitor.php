@@ -9,10 +9,11 @@ return [
 
     'company_product_uuid' => env('BISUAL_MONITOR_COMPANY_PRODUCT_UUID'),
 
-    'endpoint' => env(
-        'BISUAL_MONITOR_ENDPOINT',
-        'https://api.bisual.net/api/v1/companies/{company_uuid}/company-products/{company_product_uuid}/status-monitors/exec'
-    ),
+    /*
+    | API host only (scheme + host [+ port]). Path is fixed by the package.
+    | Examples: https://api.bisual.net , http://localhost:8000
+    */
+    'host' => env('BISUAL_MONITOR_HOST', 'https://api.bisual.net'),
 
     'timeout_seconds' => (int) env('BISUAL_MONITOR_TIMEOUT_SECONDS', 5),
 
