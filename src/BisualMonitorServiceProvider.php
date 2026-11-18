@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace Bisual\Monitor;
 
-use Illuminate\Console\Events\CommandFinished;
-use Illuminate\Console\Events\CommandStarting;
+use Illuminate\Console\Events\ScheduledBackgroundTaskFinished;
+use Illuminate\Console\Events\ScheduledTaskFailed;
+use Illuminate\Console\Events\ScheduledTaskFinished;
+use Illuminate\Console\Events\ScheduledTaskStarting;
 use Illuminate\Console\Scheduling\Event as SchedulingEvent;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\ServiceProvider;
@@ -38,8 +40,10 @@ final class BisualMonitorServiceProvider extends ServiceProvider
 
         $this->registerScheduleMacros();
 
-        Event::listen(CommandStarting::class, [ReportScheduledCommandCheckIn::class, 'handleStarting']);
-        Event::listen(CommandFinished::class, [ReportScheduledCommandCheckIn::class, 'handleFinished']);
+        Event::listen(ScheduledTaskStarting::class, [ReportScheduledCommandCheckIn::class, 'handleStarting']);
+        Event::listen(ScheduledTaskFinished::class, [ReportScheduledCommandCheckIn::class, 'handleFinished']);
+        Event::listen(ScheduledTaskFailed::class, [ReportScheduledCommandCheckIn::class, 'handleFailed']);
+        Event::listen(ScheduledBackgroundTaskFinished::class, [ReportScheduledCommandCheckIn::class, 'handleBackgroundFinished']);
     }
 
     private function registerScheduleMacros(): void
@@ -50,15 +54,7 @@ final class BisualMonitorServiceProvider extends ServiceProvider
 
         SchedulingEvent::macro('disableBisualMonitor', function (): SchedulingEvent {
             /** @var SchedulingEvent $this */
-            if (
-                ! windows_os()
-                && is_string($this->command)
-                && $this->command !== ''
-                && ! str_contains($this->command, 'BISUAL_MONITOR_DISABLE=')
-            ) {
-                // Scheduler runs each task in a subprocess; prefix env so the child skips check-ins.
-                $this->command = 'BISUAL_MONITOR_DISABLE=1 '.$this->command;
-            }
+            $this->bisualMonitorDisabled = true;
 
             return $this;
         });

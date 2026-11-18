@@ -4,78 +4,163 @@ declare(strict_types=1);
 
 namespace Bisual\Monitor;
 
-use Illuminate\Console\Events\CommandFinished;
-use Illuminate\Console\Events\CommandStarting;
-use Throwable;
+use Illuminate\Console\Events\ScheduledBackgroundTaskFinished;
+use Illuminate\Console\Events\ScheduledTaskFailed;
+use Illuminate\Console\Events\ScheduledTaskFinished;
+use Illuminate\Console\Events\ScheduledTaskStarting;
+use Illuminate\Console\Scheduling\CallbackEvent;
+use Illuminate\Console\Scheduling\Event as SchedulingEvent;
 
 final class ReportScheduledCommandCheckIn
 {
-    /** @var array<string, true> */
-    private static array $started = [];
-
     public function __construct(private readonly BisualMonitorClient $client) {}
 
-    public function handleStarting(CommandStarting $event): void
+    public function handleStarting(ScheduledTaskStarting $event): void
     {
-        $name = (string) $event->command;
-        if ($name === '' || $this->shouldSkip($name)) {
+        $task = $event->task;
+        if ($this->shouldSkip($task)) {
             return;
         }
 
-        self::$started[$name] = true;
-        $this->client->reportStart($this->client->resolveSlug($name));
+        $this->client->reportStart($this->resolveSlug($task));
     }
 
-    public function handleFinished(CommandFinished $event): void
+    public function handleFinished(ScheduledTaskFinished $event): void
     {
-        $name = (string) $event->command;
-        if ($name === '' || $this->shouldSkip($name) || ! isset(self::$started[$name])) {
+        $task = $event->task;
+        if ($this->shouldSkip($task) || $task->runInBackground) {
             return;
         }
 
-        unset(self::$started[$name]);
-        $slug = $this->client->resolveSlug($name);
-
-        if ($event->exitCode === 0) {
-            $this->client->reportEnd($slug, 'Command finished successfully');
+        if ($task->skippedBecauseOverlapping) {
+            $this->client->reportEnd(
+                $this->resolveSlug($task),
+                'Skipped: overlapping run in progress',
+            );
 
             return;
         }
 
-        $this->client->reportError(
-            $slug,
-            "Command exited with code {$event->exitCode}",
-            null,
-            null,
+        // Foreground non-zero exit: ScheduledTaskFailed follows with the exception.
+        if ((int) $task->exitCode !== 0) {
+            return;
+        }
+
+        $this->client->reportEnd(
+            $this->resolveSlug($task),
+            $this->resolveTaskOutput($task),
         );
     }
 
-    private function shouldSkip(string $command_name): bool
+    public function handleFailed(ScheduledTaskFailed $event): void
     {
-        if ($this->isDisabledViaEnvironment()) {
-            return true;
+        $task = $event->task;
+        if ($this->shouldSkip($task)) {
+            return;
         }
 
-        if ($this->client->isCommandDisabled($command_name)) {
-            return true;
-        }
+        $exception = $event->exception;
 
-        // Skip framework noise
-        return str_starts_with($command_name, 'schedule:')
-            || str_starts_with($command_name, 'queue:')
-            || in_array($command_name, ['list', 'help', 'inspire'], true);
+        $this->client->reportError(
+            $this->resolveSlug($task),
+            $exception->getMessage(),
+            $this->resolveTaskOutput($task),
+            $exception->__toString(),
+        );
     }
 
-    private function isDisabledViaEnvironment(): bool
+    public function handleBackgroundFinished(ScheduledBackgroundTaskFinished $event): void
     {
-        $value = $_SERVER['BISUAL_MONITOR_DISABLE']
-            ?? $_ENV['BISUAL_MONITOR_DISABLE']
-            ?? getenv('BISUAL_MONITOR_DISABLE');
-
-        if ($value === false || $value === null || $value === '') {
-            return false;
+        $task = $event->task;
+        if ($this->shouldSkip($task)) {
+            return;
         }
 
-        return filter_var($value, FILTER_VALIDATE_BOOL);
+        $slug = $this->resolveSlug($task);
+        $output = $this->resolveTaskOutput($task);
+        $exit_code = (int) ($task->exitCode ?? 0);
+
+        if ($exit_code !== 0) {
+            $this->client->reportError(
+                $slug,
+                "Scheduled command failed with exit code {$exit_code}",
+                $output,
+                null,
+            );
+
+            return;
+        }
+
+        $this->client->reportEnd($slug, $output);
+    }
+
+    private function shouldSkip(SchedulingEvent $task): bool
+    {
+        if ($this->isTaskMonitorDisabled($task)) {
+            return true;
+        }
+
+        $name = $this->resolveMonitorName($task);
+
+        return $name === '' || $this->client->isCommandDisabled($name);
+    }
+
+    private function isTaskMonitorDisabled(SchedulingEvent $task): bool
+    {
+        return (bool) ($task->bisualMonitorDisabled ?? false);
+    }
+
+    private function resolveSlug(SchedulingEvent $task): string
+    {
+        return $this->client->resolveSlug($this->resolveMonitorName($task));
+    }
+
+    private function resolveMonitorName(SchedulingEvent $task): string
+    {
+        if ($task instanceof CallbackEvent) {
+            if (is_string($task->description) && $task->description !== '') {
+                return $task->description;
+            }
+
+            return $task->getSummaryForDisplay();
+        }
+
+        $command = (string) ($task->command ?? '');
+        if ($command !== '' && preg_match("/\bartisan\b(?:['\"]|\s)+(.+)$/i", $command, $matches) === 1) {
+            $rest = trim($matches[1]);
+            if (preg_match("/^['\"]([^'\"]+)['\"]|^(\S+)/", $rest, $name_matches) === 1) {
+                $name = $name_matches[1] !== '' ? $name_matches[1] : ($name_matches[2] ?? '');
+                if ($name !== '') {
+                    return $name;
+                }
+            }
+        }
+
+        if (is_string($task->description) && $task->description !== '') {
+            return $task->description;
+        }
+
+        return $task->getSummaryForDisplay();
+    }
+
+    private function resolveTaskOutput(SchedulingEvent $task): ?string
+    {
+        $path = $task->output;
+        if (! is_string($path) || $path === '' || $path === '/dev/null' || strtoupper($path) === 'NUL') {
+            return null;
+        }
+
+        if (! is_file($path)) {
+            return null;
+        }
+
+        $contents = @file_get_contents($path);
+        if (! is_string($contents)) {
+            return null;
+        }
+
+        $contents = trim($contents);
+
+        return $contents === '' ? null : $contents;
     }
 }

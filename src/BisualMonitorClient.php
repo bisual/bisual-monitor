@@ -48,6 +48,7 @@ final class BisualMonitorClient
         $this->post($slug, 'error', [
             'output' => $output ?? $error,
             'error' => $error,
+            // Backend validates required_if:action,error — fall back to the error message when no throwable was captured.
             'error_stacktrace' => $error_stacktrace ?? $error,
         ]);
     }

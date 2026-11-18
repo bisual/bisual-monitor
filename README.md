@@ -1,6 +1,6 @@
 # bisual/bisual-monitor
 
-Laravel package that reports Artisan command check-ins (`start` / `end` / `error`) to Bisual **external status monitors**, similar in spirit to [Sentry Crons](https://docs.sentry.io/platforms/php/guides/laravel/crons/).
+Laravel package that reports **scheduler** check-ins (`start` / `end` / `error`) to Bisual **external status monitors**, similar in spirit to [Sentry Crons](https://docs.sentry.io/platforms/php/guides/laravel/crons/).
 
 ## Requirements
 
@@ -9,7 +9,7 @@ Laravel package that reports Artisan command check-ins (`start` / `end` / `error
 
 ## Enabling (install)
 
-No changes to `routes/console.php` are required to turn reporting on. After install + env, **every Artisan command** is reported automatically (except a few framework commands like `schedule:*` / `queue:*`).
+No changes to `routes/console.php` are required to turn reporting on. After install + env, **every scheduled task** is reported automatically (`Schedule::command`, `Schedule::call`, etc.). Manual `php artisan …` runs are **not** reported.
 
 ```bash
 composer require bisual/bisual-monitor
@@ -35,11 +35,13 @@ Also ensure on the Bisual product:
 
 ## How it works
 
-1. On `CommandStarting`, the package POSTs `action=start` with `slug` = command name.
-2. On `CommandFinished` with exit code `0`, it POSTs `action=end`.
-3. On non-zero exit, it POSTs `action=error`.
-4. Bisual auto-creates an **external** monitor for the slug on first ingest (unique per company product).
-5. Failures talking to Bisual **never** fail your command.
+1. `ScheduledTaskStarting` → POST `action=start` (`slug` = artisan command name, or callback description).
+2. `ScheduledTaskFinished` (foreground, exit `0`) → POST `action=end`.
+3. `ScheduledTaskFailed` → POST `action=error` (exception message + stack trace).
+4. `ScheduledBackgroundTaskFinished` → `end` or `error` from the background exit code.
+5. Command stdout is included when the schedule event writes output to a file (`sendOutputTo` / `appendOutputTo` / email capture). Default `/dev/null` yields no output.
+6. Bisual auto-creates an **external** monitor for the slug on first ingest (unique per company product).
+7. Failures talking to Bisual **never** fail your scheduled task.
 
 ## Disable reporting for a scheduled command
 
@@ -53,11 +55,9 @@ Schedule::command(SendEmailsCommand::class)
     ->disableBisualMonitor();
 ```
 
-This prefixes `BISUAL_MONITOR_DISABLE=1` on the scheduler subprocess command (Unix). Typical use on the Bisual Platform itself: disable the monitor **exec** / **evaluate** commands to avoid recursion.
+This sets a flag on the schedule event (no env prefix). Typical use on the Bisual Platform itself: disable the monitor **exec** / **evaluate** commands to avoid recursion.
 
-### Disable from inside a command class
-
-Useful when the command is also run manually (`php artisan …`), not only from the scheduler:
+### Disable by command name (same process)
 
 ```php
 use Bisual\Monitor\Concerns\DisablesBisualMonitor;
@@ -76,7 +76,7 @@ final class SensitiveCommand extends Command
 }
 ```
 
-Or anywhere in the app process:
+Prefer `->disableBisualMonitor()` on the schedule definition for scheduled tasks. The trait / `disableCommand()` only affects reporting when called in the **same process** that runs `schedule:run` / `schedule:finish` before the task events fire.
 
 ```php
 app(\Bisual\Monitor\BisualMonitorClient::class)->disableCommand('company-product-status-monitor:exec');
@@ -103,4 +103,4 @@ try {
 
 ## Version
 
-`0.1.1`
+`0.1.2`
