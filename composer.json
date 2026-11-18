@@ -1,0 +1,34 @@
+{
+    "name": "bisual/bisual-monitor",
+    "description": "Report Laravel scheduled command check-ins to Bisual status monitors",
+    "keywords": ["bisual", "laravel", "monitor", "cron", "uptime"],
+    "homepage": "https://github.com/bisual/bisual-monitor",
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "Bisual",
+            "email": "hello@bisual.net"
+        }
+    ],
+    "require": {
+        "php": "^8.2",
+        "illuminate/support": "^10.0|^11.0|^12.0|^13.0",
+        "illuminate/http": "^10.0|^11.0|^12.0|^13.0",
+        "illuminate/console": "^10.0|^11.0|^12.0|^13.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "Bisual\\Monitor\\": "src/"
+        }
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "Bisual\\Monitor\\BisualMonitorServiceProvider"
+            ]
+        }
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true,
+    "version": "0.1.0"
+}
