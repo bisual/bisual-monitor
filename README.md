@@ -7,14 +7,14 @@ Laravel package that reports Artisan command check-ins (`start` / `end` / `error
 - PHP 8.2+
 - Laravel 10–13
 
-## Installation
+## Enabling (install)
+
+No changes to `routes/console.php` are required to turn reporting on. After install + env, **every Artisan command** is reported automatically (except a few framework commands like `schedule:*` / `queue:*`).
 
 ```bash
 composer require bisual/bisual-monitor
 php artisan vendor:publish --tag=bisual-monitor-config
 ```
-
-## Configuration
 
 `.env`:
 
@@ -26,7 +26,12 @@ BISUAL_MONITOR_COMPANY_PRODUCT_UUID=your-product-uuid
 # BISUAL_MONITOR_ENDPOINT=http://localhost:8000/api/v1/companies/{company_uuid}/company-products/{company_product_uuid}/status-monitors/exec
 ```
 
-`config/bisual-monitor.php` is published for deeper customization (timeouts, slug prefix).
+Also ensure on the Bisual product:
+
+1. The product has an **active contract**.
+2. The server IP is on the company **IP allowlist** (required in production when allowlists are configured).
+
+`config/bisual-monitor.php` is optional after publish (timeouts, slug prefix, endpoint).
 
 ## How it works
 
@@ -36,9 +41,23 @@ BISUAL_MONITOR_COMPANY_PRODUCT_UUID=your-product-uuid
 4. Bisual auto-creates an **external** monitor for the slug on first ingest (unique per company product).
 5. Failures talking to Bisual **never** fail your command.
 
-## Disable reporting for a command
+## Disable reporting for a scheduled command
 
-In your command class:
+Same idea as Sentry’s `->sentryMonitor()`, but to **opt out** (monitoring is on by default):
+
+```php
+use Illuminate\Support\Facades\Schedule;
+
+Schedule::command(SendEmailsCommand::class)
+    ->everyHour()
+    ->disableBisualMonitor();
+```
+
+This prefixes `BISUAL_MONITOR_DISABLE=1` on the scheduler subprocess command (Unix). Typical use on the Bisual Platform itself: disable the monitor **exec** / **evaluate** commands to avoid recursion.
+
+### Disable from inside a command class
+
+Useful when the command is also run manually (`php artisan …`), not only from the scheduler:
 
 ```php
 use Bisual\Monitor\Concerns\DisablesBisualMonitor;
@@ -57,13 +76,11 @@ final class SensitiveCommand extends Command
 }
 ```
 
-Or anywhere in the app:
+Or anywhere in the app process:
 
 ```php
 app(\Bisual\Monitor\BisualMonitorClient::class)->disableCommand('company-product-status-monitor:exec');
 ```
-
-Typical commands to disable on the Bisual Platform itself: the monitor **exec** / **evaluate** commands (avoid recursion).
 
 ## Manual reporting
 
@@ -86,4 +103,4 @@ try {
 
 ## Version
 
-`0.1.0`
+`0.1.1`

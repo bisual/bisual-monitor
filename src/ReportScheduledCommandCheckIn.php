@@ -52,6 +52,10 @@ final class ReportScheduledCommandCheckIn
 
     private function shouldSkip(string $command_name): bool
     {
+        if ($this->isDisabledViaEnvironment()) {
+            return true;
+        }
+
         if ($this->client->isCommandDisabled($command_name)) {
             return true;
         }
@@ -60,5 +64,18 @@ final class ReportScheduledCommandCheckIn
         return str_starts_with($command_name, 'schedule:')
             || str_starts_with($command_name, 'queue:')
             || in_array($command_name, ['list', 'help', 'inspire'], true);
+    }
+
+    private function isDisabledViaEnvironment(): bool
+    {
+        $value = $_SERVER['BISUAL_MONITOR_DISABLE']
+            ?? $_ENV['BISUAL_MONITOR_DISABLE']
+            ?? getenv('BISUAL_MONITOR_DISABLE');
+
+        if ($value === false || $value === null || $value === '') {
+            return false;
+        }
+
+        return filter_var($value, FILTER_VALIDATE_BOOL);
     }
 }

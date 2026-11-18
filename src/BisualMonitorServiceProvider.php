@@ -6,6 +6,7 @@ namespace Bisual\Monitor;
 
 use Illuminate\Console\Events\CommandFinished;
 use Illuminate\Console\Events\CommandStarting;
+use Illuminate\Console\Scheduling\Event as SchedulingEvent;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\ServiceProvider;
 
@@ -35,7 +36,31 @@ final class BisualMonitorServiceProvider extends ServiceProvider
             ], 'bisual-monitor-config');
         }
 
+        $this->registerScheduleMacros();
+
         Event::listen(CommandStarting::class, [ReportScheduledCommandCheckIn::class, 'handleStarting']);
         Event::listen(CommandFinished::class, [ReportScheduledCommandCheckIn::class, 'handleFinished']);
+    }
+
+    private function registerScheduleMacros(): void
+    {
+        if (SchedulingEvent::hasMacro('disableBisualMonitor')) {
+            return;
+        }
+
+        SchedulingEvent::macro('disableBisualMonitor', function (): SchedulingEvent {
+            /** @var SchedulingEvent $this */
+            if (
+                ! windows_os()
+                && is_string($this->command)
+                && $this->command !== ''
+                && ! str_contains($this->command, 'BISUAL_MONITOR_DISABLE=')
+            ) {
+                // Scheduler runs each task in a subprocess; prefix env so the child skips check-ins.
+                $this->command = 'BISUAL_MONITOR_DISABLE=1 '.$this->command;
+            }
+
+            return $this;
+        });
     }
 }
